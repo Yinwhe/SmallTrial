@@ -1,0 +1,21 @@
+{
+    "files.associations": {
+        "*.c": "c",
+        "string.h": "c",
+        "stdlib.h": "c",
+        "stdio.h": "c",
+        "types.h": "c",
+        "errno.h": "c",
+        "pwd.h": "c",
+        "grp.h": "c",
+        "dirent.h": "c",
+        "time.h": "c",
+        "stat.h": "c",
+        "locale": "c",
+        "ostream": "c",
+        "streambuf": "c",
+        "__config": "c",
+        "algorithm": "c",
+        "atomic": "c"
+    }
+}
