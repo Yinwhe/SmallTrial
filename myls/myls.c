@@ -60,19 +60,22 @@
 #define GROUP   (1L<<2) // 输出组信息
 #define NUM     (1L<<3) // 信息按id输出
 
-#define MAX_FILE_ONCE 100   // 一次最多有100个file参数
-#define MAX_FILE_NAME 256   // 每个file名称最长为100
+#define MAX_FILE_ONCE 128   // 一次最多有128个file参数
+#define MAX_FILE_NAME 1024   // 每个file名称最长为1024
+#define MAX_FILE_NUM  1024  // 假设一个文件夹最多1024个文件
 
 int     cmp(char *file1, char *file2, int op);
 void    order(char (*file)[MAX_FILE_NAME], int filenum, int op);
-void    list_file(char (*param)[MAX_FILE_NAME], int *file, int filenum);
-int     list_dir(char (*param)[MAX_FILE_NAME], int *dir, int dirnum);
-void    list_single(char *name);
+void    list_file(char (*param)[MAX_FILE_NAME], int *file, int filenumn, int op);
+void    list_dir(char (*param)[MAX_FILE_NAME], int *dir, int dirnum);
+void    list_content_dir(char *dirname, char *path);
+int    list_single(char *name);
 void    list_attr(struct stat fstat);
 void    info(char (*filename)[MAX_FILE_NAME], int filenum);
 
 int options = 0;
 int longformat = 6; // 0110
+char cwd[MAX_FILE_NAME];
 
 
 int main(int argc, char **argv){
@@ -146,8 +149,13 @@ int main(int argc, char **argv){
         }
     }
 
+    if(getcwd(cwd, sizeof(cwd)) == NULL){
+        printf(L_RED "Error: CWD too long!\n" NONE);
+        return 1;
+    }
+
     /* 先处理文件类型的输出 */
-    list_file(param, file, filenum);
+    list_file(param, file, filenum, 0);
 
     /* 在处理目录类型的输出 */
     list_dir(param, dir, dirnum);
@@ -220,16 +228,34 @@ void order(char (*file)[MAX_FILE_NAME], int filenum, int op){
  * 
  * @param param 
  * @param file 
- * @param filenum 
+ * @param filenum
  */
-void list_file(char (*param)[MAX_FILE_NAME], int *file, int filenum){
+void list_file(char (*param)[MAX_FILE_NAME], int *file, int filenum, int op){
     if(filenum <= 0){
         return;
     }
     /* 开始处理 */
     char filename[filenum][MAX_FILE_NAME];
-    for(int i=0; i<filenum; i++){
-        strcpy(filename[i], param[file[i]]);
+    if(!op){
+        for(int i=0; i<filenum; i++){
+            strcpy(filename[i], param[file[i]]);
+        }
+    }else{
+        for(int i=0; i<filenum; i++){
+            strcpy(filename[i], param[i]);
+        }
+    }
+
+    if(op){
+        /* 统计块数*/
+        struct stat fstat;
+        int totalblk = 0;
+        for(int i=0; i<filenum; i++){
+            lstat(filename[i], &fstat);
+            totalblk += fstat.st_blocks;
+        }
+        if(longformat & LONG)
+            printf("total:  %-6d\n", totalblk);
     }
 
     /* 处理排序 */
@@ -254,6 +280,7 @@ void list_file(char (*param)[MAX_FILE_NAME], int *file, int filenum){
     }
 
     info(filename, filenum); // 进行输出
+    putchar('\n');
 }
 
 /**
@@ -262,14 +289,78 @@ void list_file(char (*param)[MAX_FILE_NAME], int *file, int filenum){
  * @param param 
  * @param dir 
  * @param dirnum 
- * @return int 
  */
-int list_dir(char (*param)[MAX_FILE_NAME], int *dir, int dirnum){
+void list_dir(char (*param)[MAX_FILE_NAME], int *dir, int dirnum){
+    if(dirnum <= 0){
+        return;
+    }
 
+    for(int i=0; i<dirnum; i++){
+        list_content_dir(param[dir[i]], "");
+        chdir(cwd);
+    }
+}
+
+void list_content_dir(char *dirname, char *path){
+    /* 开始处理 */
+    DIR *dp;
+    struct dirent *entry;
+    struct stat fstat;
+
+    char filename[MAX_FILE_NUM][MAX_FILE_NAME], _path[MAX_FILE_NAME];
+    int dirRev[MAX_FILE_NUM];
+    int filenum = 0, dirRnum = 0;
+
+    if((dp=opendir(dirname)) == NULL){
+        printf(L_RED "myls: cannot access '%s': No such file or directory\n" NONE, dirname);
+        return;
+    }
+
+    strcpy(_path, path);
+    chdir(dirname);
+    filenum = dirRnum = 0;
+    while((entry = readdir(dp)) != NULL){
+        strcpy(filename[filenum], entry->d_name);
+        filenum += 1;
+    }
+    closedir(dp);
+
+    printf("%s:\n", dirname);
+    list_file(filename, NULL, filenum, 1);
+    putchar('\n');
+
+    /* 处理递归输出 */
+    if(options & OP_R){
+        for(int i=0; i<filenum; i++){
+            lstat(filename[i], &fstat);
+            if(S_ISDIR(fstat.st_mode)){
+                dirRev[dirRnum++] = i;
+            }
+        }
+    }
+
+    if(dirRnum){
+        strcat(_path, dirname);
+        if(_path[strlen(_path)-1] != '/')
+            strcat(_path, "/");
+    }
+    for(int i=0; i<dirRnum; i++){
+        /* 处理不输出的目录 */
+        if(filename[dirRev[i]][0] == '.'){
+            if(filename[dirRev[i]][1] == '\0' || filename[dirRev[i]][1] == '.')
+                continue;
+            if(!(options & OP_a) && !(options & OP_A)){
+                continue;
+            }
+        }
+        printf("%s", _path);
+        list_content_dir(filename[dirRev[i]], _path);
+        chdir("..");
+    }
 }
 
 static void trans(double num){
-    static char unit[] = {'\0', 'K', 'M', 'G', 'T', 'P'};
+    static char unit[] = {'B', 'K', 'M', 'G', 'T', 'P'};
     int u=0;
     while(num>=0x400){
         u += 1;
@@ -278,26 +369,30 @@ static void trans(double num){
         if(u == 5) break; // 过大
     }
     if(!u)
-        printf("%d", (int)num);
+        printf("%6d%c", (int)num, unit[u]);
     else
-        printf("%.1f%c", num, unit[u]);
+        printf("%6.1f%c", num, unit[u]);
 }
 
-void list_single(char *name){
+/**
+ * @brief 列出一个单项
+ * 
+ * @param name 该项的名称
+ * @return int 0表示正常输出，1表示未输出
+ */
+int list_single(char *name){
     struct stat fstat;
-
+    //printf("list_single: %s\n", name);
     /* 处理不输出的文件 */
     if(name[0] == '.'){
         if(!(options & OP_a)){
             if(!(options & OP_A))
-                return;
+                return 1;
             else if(name[1] == '\0' || name[1] == '.')
-                return;
+                return 1;
         }
     }
-
     lstat(name, &fstat);
-
     /* 输出inode */
     if(options & OP_i) 
         printf("%8llu ", fstat.st_ino);
@@ -314,28 +409,66 @@ void list_single(char *name){
 
     /* 是否加引号输出名称 */
     if(options & OP_Q){
-        printf("\"%s\"", name);
+        if (S_ISDIR(fstat.st_mode)){ //目录
+            printf(L_CYAN "\"%s\"" NONE, name);
+            if(options & OP_F)
+                putchar('/');
+        }
+        else if (S_ISLNK(fstat.st_mode)){ //符号链接
+            printf(L_PURPLE "\"%s\"" NONE, name);
+            if(options & OP_F)
+                putchar('@');
+        }
+        else if (S_ISSOCK(fstat.st_mode)){ // socket文件
+            printf(L_BLUE "\"%s\"" NONE, name);
+            if(options & OP_F)
+                putchar('=');
+        }
+        else if (S_ISFIFO(fstat.st_mode)){ // 管道文件
+            printf("\"%s\"", name);
+            if(options & OP_F)
+                putchar('|');
+        }
+        else if (fstat.st_mode & S_IXUSR){ // 一般可执行文件
+            printf(L_GREEN "\"%s\"" NONE, name);
+            if(options & OP_F)
+                putchar('*');
+        }
+        else{
+            printf("\"%s\"", name);
+        }
     }else{
-        printf("%s", name);
+        if (S_ISDIR(fstat.st_mode)){ //目录
+            printf(L_CYAN "%s" NONE, name);
+            if(options & OP_F)
+                putchar('/');
+        }
+        else if (S_ISLNK(fstat.st_mode)){ //符号链接
+            printf(L_PURPLE "%s" NONE, name);
+            if(options & OP_F)
+                putchar('@');
+        }
+        else if (S_ISSOCK(fstat.st_mode)){ // socket文件
+            printf(L_BLUE "%s" NONE, name);
+            if(options & OP_F)
+                putchar('=');
+        }
+        else if (S_ISFIFO(fstat.st_mode)){ // 管道文件
+            printf("%s", name);
+            if(options & OP_F)
+                putchar('|');
+        }
+        else if (fstat.st_mode & S_IXUSR){ // 一般可执行文件
+            printf(L_GREEN "%s" NONE, name);
+            if(options & OP_F)
+                putchar('*');
+        }
+        else{
+            printf("%s", name);
+        }
     }
     
-    /* 是否-F */
-    if(options & OP_F){
-        if (S_ISDIR(fstat.st_mode)) //目录
-            putchar('/');
-        else if (S_ISLNK(fstat.st_mode)) //符号链接
-            putchar('@');
-        else if (S_ISSOCK(fstat.st_mode))
-            putchar('=');
-        else if (S_ISFIFO(fstat.st_mode))
-            putchar('|');
-        else if (fstat.st_mode & S_IXUSR)
-            putchar('*');
-    }else if((options & OP_p) && S_ISDIR(fstat.st_mode)){
-        putchar('/');
-    }
-    
-    return;
+    return 0;
 }
 
 void list_attr(struct stat fstat){
@@ -413,21 +546,16 @@ void info(char (*filename)[MAX_FILE_NAME], int filenum){
     struct stat fstat;
     int totalblk = 0;
 
-    /* 统计块数*/
-    for(int i=0; i<filenum; i++){
-        lstat(filename[i], &fstat);
-        totalblk += fstat.st_blocks;
-    }
-
     /* 逐一控制输出 */
     for(int i=0; i<filenum; i++){
-        list_single(filename[i]);
-
-        /* 结尾分割的控制 */
-        if(i == filenum-1) continue; // 最后一个跳过即可
-        if((longformat & LONG) || (options & OP_1))
-            printf("\n");
-        else if(options & OP_m)
-            printf(", ");
+        if(!list_single(filename[i])){
+            /* 结尾分割的控制 */
+            if(i == filenum-1) continue; // 最后一个跳过即可
+            if((longformat & LONG) || (options & OP_1))
+                printf("\n");
+            else if(options & OP_m)
+                printf(", ");
+            else printf(" ");
+        }
     }
 }

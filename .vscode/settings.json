@@ -16,6 +16,7 @@
         "streambuf": "c",
         "__config": "c",
         "algorithm": "c",
-        "atomic": "c"
+        "atomic": "c",
+        "typeinfo": "c"
     }
 }
