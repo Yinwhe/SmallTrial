@@ -64,25 +64,29 @@
 #define MAX_FILE_NAME 1024   // 每个file名称最长为1024
 #define MAX_FILE_NUM  1024  // 假设一个文件夹最多1024个文件
 
+/* 函数声明 */
 int     cmp(char *file1, char *file2, int op);
 void    order(char (*file)[MAX_FILE_NAME], int filenum, int op);
 void    list_file(char (*param)[MAX_FILE_NAME], int *file, int filenumn, int op);
 void    list_dir(char (*param)[MAX_FILE_NAME], int *dir, int dirnum);
 void    list_content_dir(char *dirname, char *path);
-int    list_single(char *name);
+int     list_single(char *name);
 void    list_attr(struct stat fstat);
 void    info(char (*filename)[MAX_FILE_NAME], int filenum);
 
-int options = 0;
-int longformat = 6; // 0110
+/* 控制用的参数 */
+int options = 0;    // 用户输入的参数
+int longformat = 6; // 长格式控制
 char cwd[MAX_FILE_NAME];
 
-
+/**
+ * @brief main函数将对参数进行解析
+ */
 int main(int argc, char **argv){
 
     int paramnumber = 0, filenum = 0, dirnum = 0;
 
-    char param[MAX_FILE_ONCE][MAX_FILE_NAME];
+    char param[MAX_FILE_ONCE][MAX_FILE_NAME]; // 输入的文件/目录
     int file[MAX_FILE_ONCE] = {0};
     int dir[MAX_FILE_ONCE] = {0};
 
@@ -101,6 +105,7 @@ int main(int argc, char **argv){
                     case 'A': options |= OP_A; break;
                     case 'c': options |= OP_c; break;
                     case 'd': options |= OP_d; break;
+                    case 'S': options |= OP_S; break;
                     case 'F': options |= OP_F; break;
                     case 'g': options |= OP_g; longformat |= LONG; longformat &= (~OWNER); break;
                     case 'G': options |= OP_G; longformat &= ~OWNER; break;
@@ -162,7 +167,7 @@ int main(int argc, char **argv){
 }
 
 /**
- * @brief 文件间的比较
+ * @brief 文件间的比较函数
  * 
  * @param op 0--按名称
  *           1--按ctime
@@ -181,10 +186,10 @@ int cmp(char *file1, char *file2, int op){
     lstat(file2, &fstat2);
 
     switch(op){
-        case 1: return fstat2.st_ctime - fstat1.st_ctime;
-        case 2: return fstat2.st_atime - fstat1.st_atime;
-        case 3: return fstat2.st_mtime - fstat1.st_mtime;
-        case 4: return fstat2.st_size - fstat1.st_size;
+        case 1: return fstat2.st_ctime - fstat1.st_ctime; // ctime
+        case 2: return fstat2.st_atime - fstat1.st_atime; // atime
+        case 3: return fstat2.st_mtime - fstat1.st_mtime; // mtime
+        case 4: return fstat2.st_size - fstat1.st_size;   // size
         default: printf(L_RED "Internal error: cmp\n" NONE); while(1);
     }
 }
@@ -225,10 +230,6 @@ void order(char (*file)[MAX_FILE_NAME], int filenum, int op){
 
 /**
  * @brief 按顺序列出文件
- * 
- * @param param 
- * @param file 
- * @param filenum
  */
 void list_file(char (*param)[MAX_FILE_NAME], int *file, int filenum, int op){
     if(filenum <= 0){
@@ -236,11 +237,11 @@ void list_file(char (*param)[MAX_FILE_NAME], int *file, int filenum, int op){
     }
     /* 开始处理 */
     char filename[filenum][MAX_FILE_NAME];
-    if(!op){
+    if(!op){ // 由main调用，需要参数 file
         for(int i=0; i<filenum; i++){
             strcpy(filename[i], param[file[i]]);
         }
-    }else{
+    }else{ // 由list_dir调用，不需要参数 file
         for(int i=0; i<filenum; i++){
             strcpy(filename[i], param[i]);
         }
@@ -252,14 +253,27 @@ void list_file(char (*param)[MAX_FILE_NAME], int *file, int filenum, int op){
         int totalblk = 0;
         for(int i=0; i<filenum; i++){
             lstat(filename[i], &fstat);
+
+            /* 不统计不需要输出文件的大小 */
+            if(filename[i][0] == '.'){
+                if(!(options & OP_a)){
+                    if(!(options & OP_A))
+                        continue;
+                    else if(filename[i][1] == '\0' || filename[i][1] == '.')
+                        continue;
+                }
+            }
             totalblk += fstat.st_blocks;
         }
+
         if(longformat & LONG)
             printf("total:  %-6d\n", totalblk);
     }
 
     /* 处理排序 */
-    if(options & OP_t){ // 按时间排序
+    if(options & OP_S){     // 按大小
+        order(filename, filenum, 4);
+    }else if(options & OP_t){ // 按时间排序
         if(options & OP_c) // 按ctime
             order(filename, filenum, 1);
         else if(options & OP_u) // 按atime
@@ -273,8 +287,6 @@ void list_file(char (*param)[MAX_FILE_NAME], int *file, int filenum, int op){
             order(filename, filenum, 2);
         else
             order(filename, filenum, 0); // 字典序
-    }else if(options & OP_S){
-        order(filename, filenum, 4);    // 按大小
     }else{
         order(filename, filenum, 0);    // 字典序
     }
@@ -285,22 +297,25 @@ void list_file(char (*param)[MAX_FILE_NAME], int *file, int filenum, int op){
 
 /**
  * @brief 按顺序列出目录内的内容
- * 
- * @param param 
- * @param dir 
- * @param dirnum 
  */
 void list_dir(char (*param)[MAX_FILE_NAME], int *dir, int dirnum){
     if(dirnum <= 0){
         return;
     }
 
+    /* 一次输出一个文件夹 */
     for(int i=0; i<dirnum; i++){
         list_content_dir(param[dir[i]], "");
         chdir(cwd);
     }
 }
 
+/**
+ * @brief 输出一个文件夹的信息
+ * 
+ * @param dirname 文件夹名称
+ * @param path    文件夹的父目录，用于输出
+ */
 void list_content_dir(char *dirname, char *path){
     /* 开始处理 */
     DIR *dp;
@@ -311,6 +326,7 @@ void list_content_dir(char *dirname, char *path){
     int dirRev[MAX_FILE_NUM];
     int filenum = 0, dirRnum = 0;
 
+    /* 打开文件夹 */
     if((dp=opendir(dirname)) == NULL){
         printf(L_RED "myls: cannot access '%s': No such file or directory\n" NONE, dirname);
         return;
@@ -319,33 +335,38 @@ void list_content_dir(char *dirname, char *path){
     strcpy(_path, path);
     chdir(dirname);
     filenum = dirRnum = 0;
+
+
+    /* 读取文件夹中的目录项 */
     while((entry = readdir(dp)) != NULL){
         strcpy(filename[filenum], entry->d_name);
         filenum += 1;
     }
     closedir(dp);
-
     printf("%s:\n", dirname);
     list_file(filename, NULL, filenum, 1);
     putchar('\n');
 
     /* 处理递归输出 */
     if(options & OP_R){
+        /* 读取目录中的目录项，选择输出子目录 */
         for(int i=0; i<filenum; i++){
             lstat(filename[i], &fstat);
-            if(S_ISDIR(fstat.st_mode)){
+            if(S_ISDIR(fstat.st_mode)){ // 是子目录，记录下来位置
                 dirRev[dirRnum++] = i;
             }
         }
     }
 
+    /* 更新子目录的父目录用于输出 */
     if(dirRnum){
         strcat(_path, dirname);
         if(_path[strlen(_path)-1] != '/')
             strcat(_path, "/");
     }
+
     for(int i=0; i<dirRnum; i++){
-        /* 处理不输出的目录 */
+        /* 跳过不输出的目录 */
         if(filename[dirRev[i]][0] == '.'){
             if(filename[dirRev[i]][1] == '\0' || filename[dirRev[i]][1] == '.')
                 continue;
@@ -354,14 +375,20 @@ void list_content_dir(char *dirname, char *path){
             }
         }
         printf("%s", _path);
+        /*  递归的输出子目录 */
         list_content_dir(filename[dirRev[i]], _path);
         chdir("..");
     }
 }
 
+/**
+ * @brief 用于 -h 参数对数值进行人性化显示
+ */
 static void trans(double num){
     static char unit[] = {'B', 'K', 'M', 'G', 'T', 'P'};
     int u=0;
+
+    /* 以1024为单位 */
     while(num>=0x400){
         u += 1;
         num /= 0x400;
@@ -382,8 +409,7 @@ static void trans(double num){
  */
 int list_single(char *name){
     struct stat fstat;
-    //printf("list_single: %s\n", name);
-    /* 处理不输出的文件 */
+    /* 跳过不输出的文件 */
     if(name[0] == '.'){
         if(!(options & OP_a)){
             if(!(options & OP_A))
@@ -407,11 +433,11 @@ int list_single(char *name){
         list_attr(fstat);
     }
 
-    /* 是否加引号输出名称 */
+    /* 进行输出，包括-F, -Q, -p 的处理 */
     if(options & OP_Q){
         if (S_ISDIR(fstat.st_mode)){ //目录
             printf(L_CYAN "\"%s\"" NONE, name);
-            if(options & OP_F)
+            if(options & OP_F || options & OP_p)
                 putchar('/');
         }
         else if (S_ISLNK(fstat.st_mode)){ //符号链接
@@ -440,7 +466,7 @@ int list_single(char *name){
     }else{
         if (S_ISDIR(fstat.st_mode)){ //目录
             printf(L_CYAN "%s" NONE, name);
-            if(options & OP_F)
+            if(options & OP_F || options & OP_p)
                 putchar('/');
         }
         else if (S_ISLNK(fstat.st_mode)){ //符号链接
@@ -471,6 +497,9 @@ int list_single(char *name){
     return 0;
 }
 
+/**
+ * @brief 列出文件的长格式（不输出名称，只输出属性）
+ */
 void list_attr(struct stat fstat){
     struct passwd *pwd; //用户名
     struct group *grp;  //组名
@@ -526,7 +555,7 @@ void list_attr(struct stat fstat){
     if(options & OP_h){
         trans(fstat.st_size);
     }else{
-        printf("%lld", fstat.st_size);
+        printf("%6lld", fstat.st_size);
     }
     putchar(' ');
     
@@ -542,6 +571,9 @@ void list_attr(struct stat fstat){
     printf(" %s ", time+4);
 }
 
+/**
+ * @brief 用于输出的总函数
+ */
 void info(char (*filename)[MAX_FILE_NAME], int filenum){
     struct stat fstat;
     int totalblk = 0;
