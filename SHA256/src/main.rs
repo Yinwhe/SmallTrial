@@ -2,10 +2,18 @@
  * @Author: Yinwhe
  * @Date: 2021-09-13 10:56:07
  * @LastEditors: Yinwhe
- * @LastEditTime: 2021-09-14 13:38:42
+ * @LastEditTime: 2021-09-28 09:59:17
  * @Description: SHA256 in rust
  * @Copyright: Copyright (c) 2021
  */
+use std::thread;
+use std::sync::{mpsc, Arc, Mutex};
+use std::sync::mpsc::{Receiver, Sender};
+use std::time::Instant;
+enum Message{
+    Target([u8; 16]),
+}
+
 const K: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -103,17 +111,13 @@ impl Sha256 {
         if self.num_pending < 56 {
             let mut block = self.pending.clone();
             block[self.num_pending] = 0x80;
-            unsafe{
-                block[56..].copy_from_slice(&bits.to_be_bytes() as &[u8; 8]);
-            }
+            block[56..].copy_from_slice(&bits.to_be_bytes() as &[u8; 8]);
             self.deal_one(&block);
         } else {
             let mut blocks = [0u8; 128];
             blocks[..64].copy_from_slice(&self.pending);
             blocks[self.num_pending] = 0x80;
-            unsafe{
-                blocks[120..].copy_from_slice(&bits.to_be_bytes() as &[u8; 8]);
-            }
+            blocks[120..].copy_from_slice(&bits.to_be_bytes() as &[u8; 8]);
             self.deal_one(unsafe {&*(blocks.as_ptr() as *const u8 as *const [u8; 64])});
             self.deal_one(unsafe {&*(blocks.as_ptr().add(64) as *const u8 as *const [u8; 64])});
         }
@@ -130,10 +134,62 @@ impl Sha256 {
     }
 }
 
+fn check_zero(s: &[u8]) -> bool {
+    if s[0] == 0 && s[1] == 0 && s[2] == 0 && s[3] & 0xFE == 0 { // 31 bits
+        return true;
+    }
+    false
+}
+
+#[test]
+fn test_sha() {
+    let mut line = String::new();
+    println!("Please input a string:");
+    std::io::stdin().read_line(&mut line).unwrap();
+    line.pop();
+    let res = Sha256::digest(line.as_bytes());
+
+    print!("res: 0x");
+    for x in res {
+        print!("{:02x}", x);
+    }
+    println!();
+}
+
 fn main() {
-    let test = b"173af653133d964edfc16cafe0aba33c8f500a07f3ba3f81943916910c257705";
-    let res = Sha256::digest(test);
-    print!("0x");
+    let mut handles = vec![];
+    let (sender, receiver):(Sender<Message>, Receiver<Message>) = mpsc::channel();
+    let sender = Arc::new(Mutex::new(sender));
+    let start = Instant::now();
+    for i in 0..4 {
+        let s = Arc::clone(&sender);
+        let handle = thread::spawn(move || {
+            let mut cnt = i as u128 + 0xd72f345a;
+            // let mut src = [0u8; 32];
+            let mut src = cnt.to_be_bytes() as [u8; 16];
+            let mut res = Sha256::digest(&src);
+
+            while !check_zero(&res) {
+                src = cnt.to_be_bytes() as [u8; 16];
+                // src = rand::random();
+                res = Sha256::digest(&src);
+                cnt += 4;
+            }
+
+            s.lock().unwrap().send(Message::Target(src)).unwrap();
+        });
+        handles.push(handle);
+    }
+    let target = receiver.recv().unwrap();
+    let Message::Target(target) = target;
+    let res = Sha256::digest(&target);
+    println!("---Found target, time: {}ms---", start.elapsed().as_millis());
+    print!("src: 0x");
+    for x in target {
+        print!("{:02x}", x);
+    }
+    println!();
+    print!("res: 0x");
     for x in res {
         print!("{:02x}", x);
     }
