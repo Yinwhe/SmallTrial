@@ -17,6 +17,14 @@
         "__config": "c",
         "algorithm": "c",
         "atomic": "c",
-        "typeinfo": "c"
+        "typeinfo": "c",
+        "iostream": "cpp",
+        "string": "cpp",
+        "iosfwd": "cpp",
+        "mutex": "cpp",
+        "utility": "cpp",
+        "array": "cpp",
+        "vector": "cpp",
+        "string_view": "cpp"
     }
 }
