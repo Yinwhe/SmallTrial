@@ -2,7 +2,7 @@
 Author: Yinwhe
 Date: 2021-10-16 23:51:05
 LastEditors: Yinwhe
-LastEditTime: 2021-12-03 14:44:35
+LastEditTime: 2021-12-30 19:01:23
 Description: file information
 Copyright: Copyright (c) 2021
 '''
@@ -10,11 +10,12 @@ import cv2
 import time
 from urllib import request
 from selenium import webdriver
+from selenium.webdriver.chrome import options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
+from selenium.webdriver import EdgeOptions
 
 class spider:
     def __init__(self) -> None:
@@ -23,8 +24,15 @@ class spider:
         self.template_xpath = "/html/body/div[4]/div/div/div/div[1]/div[2]/div[2]/img"
 
     def launch(self) -> None:
+        option = EdgeOptions()
+        option.add_experimental_option('excludeSwitches', ['enable-automation'])
+        option.add_experimental_option('useAutomationExtension', False)
         self.driver = webdriver.Edge()
         self.wait = WebDriverWait(self.driver, 10, 0.5)
+        
+        self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+        'source': 'Object.defineProperty(navigator, "webdriver", {get: () => undefined})'
+        })
 
         self.driver.get(self.url)
         self.driver.find_element(
@@ -52,11 +60,8 @@ class spider:
         src2 = template.get_attribute("src")
         request.urlretrieve(src1, "img1.png")
         request.urlretrieve(src2, "img2.png")
-        # width_render = target.size['width']
-        # width_intrinsic = target
-        # print(width_intrinsic)
-        # exit(0)
-        return self.locate_pic() * 278 / 360 - 10
+
+        return self.locate_pic() * 278 / 360 - 12
 
     def get_tracks(self) -> list:
         # 初速度
@@ -99,7 +104,7 @@ class spider:
         self.distance = self.solve_pic()
         print("Distance: {}".format(self.distance))
         self.move()
-        self.quit()
+        # self.quit()
 
 
 if __name__ == '__main__':

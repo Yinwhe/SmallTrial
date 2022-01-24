@@ -2,7 +2,7 @@
 Author: Yinwhe
 Date: 2021-12-03 14:48:30
 LastEditors: Yinwhe
-LastEditTime: 2021-12-03 15:32:48
+LastEditTime: 2021-12-30 00:14:56
 Description: file information
 Copyright: Copyright (c) 2021
 '''
@@ -17,33 +17,18 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 class spider:
-    def __init__(self) -> None:
-        self.url = "https://www.maoyan.com/board/4"
-        self.target_xpath = "//div[@id='slideBgWrap']/img"
-        self.template_xpath = "//div[@id='slideBlockWrap']/img"
-
     def launch(self) -> None:
         self.driver = webdriver.Edge()
         self.wait = WebDriverWait(self.driver, 10, 0.5)
 
         self.driver.get(self.url)
-        # self.driver.find_element(
-        #     By.XPATH, '/html/body/div[2]/div[2]/div[1]/div/div[3]/a').click()
-        # self.driver.find_element(
-        #     By.XPATH, '//*[@id="loginname"]').send_keys('123456')
-        # self.driver.find_element(
-        #     By.XPATH, '//*[@id="nloginpwd"]').send_keys('123456')
-        # self.driver.find_element(By.XPATH, '//*[@id="loginsubmit"]').click()
+        
+        
+    def __init__(self) -> None:
+        self.url = "https://www.maoyan.com/board/4"
+        self.target_xpath = "//div[@id='slideBgWrap']/img"
+        self.template_xpath = "//div[@id='slideBlockWrap']/img"
 
-    def locate_pic(self, target="img1.png", template="img2.png") -> float:
-        # read pic
-        target_rgb = cv2.imread(target)
-        target_gray = cv2.cvtColor(target_rgb, cv2.COLOR_BGR2GRAY)
-        template_rgb = cv2.imread(template, 0)
-        res = cv2.matchTemplate(
-            target_gray, template_rgb, cv2.TM_CCOEFF_NORMED)
-        value = cv2.minMaxLoc(res)
-        return value[2][0]
 
     def solve_pic(self) -> float:
         frame = self.wait.until(
@@ -58,6 +43,18 @@ class spider:
         width_render = target.size['width']
         width_intrinsic = cv2.imread('img1.png').shape[1]
         return self.locate_pic() * width_render / width_intrinsic - 50
+
+
+    def locate_pic(self, target="img1.png", template="img2.png") -> float:
+        # read pic
+        target_rgb = cv2.imread(target)
+        target_gray = cv2.cvtColor(target_rgb, cv2.COLOR_BGR2GRAY)
+        template_rgb = cv2.imread(template, 0)
+        res = cv2.matchTemplate(
+            target_gray, template_rgb, cv2.TM_CCOEFF_NORMED)
+        value = cv2.minMaxLoc(res)
+        return value[2][0]
+
 
     def get_tracks(self) -> list:
         # 初速度
@@ -100,7 +97,6 @@ class spider:
         self.distance = self.solve_pic()
         print("Distance: {}".format(self.distance))
         self.move()
-        self.quit()
 
 
 if __name__ == '__main__':

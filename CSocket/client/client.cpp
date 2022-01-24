@@ -2,7 +2,7 @@
  * @Author: Yinwhe
  * @Date: 2021-12-19 10:39:35
  * @LastEditors: Yinwhe
- * @LastEditTime: 2021-12-19 19:37:52
+ * @LastEditTime: 2021-12-28 10:06:31
  * @Description: Client part
  * @Copyright: Copyright (c) 2021
  */
@@ -13,6 +13,8 @@ using namespace std;
 void *helper_thread(void *arg)
 {
     int sockfd = *(int *)arg;
+    int i = 0;
+
 
     Message msg;
     key_t key = ftok("c", 12);
@@ -34,7 +36,7 @@ void *helper_thread(void *arg)
         {
             printf("[Error] helper recv fail, error: %s\n", strerror(errno));
         }
-
+        
         if (msg.type == REPOST)
         {
             printf("Receive repost: %s\n", msg.data);
@@ -62,7 +64,8 @@ public:
         }
 
         char msg[MAX_SIZE];
-        while(msgrcv(msgID, &msg, MAX_SIZE, 0, IPC_NOWAIT) > 0);
+        while (msgrcv(msgID, &msg, MAX_SIZE, 0, IPC_NOWAIT) > 0)
+            ;
     }
 
     ~Client()
@@ -204,6 +207,7 @@ private:
 
         Message msg;
         long type = GET_TIME;
+
         if (msgrcv(msgID, &msg, MAX_SIZE, type, 0) < 0)
         {
             printf("[Error] getServerTime recv fail, error: %s\n", strerror(errno));
@@ -298,7 +302,6 @@ private:
         printf("Send content: ");
         scanf("%s", content);
         sprintf(msg.data + strlen(msg.data), "%s", content);
-        printf("%s\n", msg.data);
 
         if (send(sockfd, &msg, sizeof(msg), 0) < 0)
         {
